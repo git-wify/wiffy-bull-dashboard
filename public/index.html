@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bull Queue Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="/socket.io/socket.io.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🐂 Bull Queue Dashboard</h1>
+        <nav class="navigation">
+          <button id="redis-tab" class="nav-btn active">
+            📊 Redis Monitoring
+          </button>
+          <button id="queues-tab" class="nav-btn">🔄 Queue Management</button>
+        </nav>
+        <div class="header-controls">
+          <div class="status-indicator">
+            <span id="connection-status" class="status-dot offline"></span>
+            <span id="connection-text">Connecting...</span>
+          </div>
+          <button id="refresh-btn" class="refresh-btn">🔄 Refresh</button>
+        </div>
+      </header>
+
+      <!-- Redis Monitoring Page -->
+      <div id="redis-page" class="page active">
+        <div class="redis-monitoring">
+          <h2>📊 Redis Monitoring</h2>
+          <div class="redis-stats">
+            <div class="redis-stat-card">
+              <h3>CPU Usage</h3>
+              <span id="redis-cpu" class="redis-stat-number">0%</span>
+              <div class="chart-container">
+                <canvas id="cpu-chart" width="200" height="100"></canvas>
+              </div>
+            </div>
+            <div class="redis-stat-card">
+              <h3>Memory Usage</h3>
+              <span id="redis-memory" class="redis-stat-number">0%</span>
+              <div class="redis-stat-sublabel" id="memory-total">
+                0 GB Total
+              </div>
+              <div class="chart-container">
+                <canvas id="memory-chart" width="200" height="100"></canvas>
+              </div>
+            </div>
+            <div class="redis-stat-card">
+              <h3>Connected Clients</h3>
+              <span id="redis-clients" class="redis-stat-number">0</span>
+            </div>
+            <div class="redis-stat-card">
+              <h3>Total Keys</h3>
+              <span id="redis-keys" class="redis-stat-number">0</span>
+              <div class="redis-stat-sublabel" id="keys-size">0 MB</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Management Page -->
+      <div id="queues-page" class="page">
+        <div class="dashboard-stats">
+          <div class="stat-card">
+            <h3>Total Queues</h3>
+            <span id="total-queues" class="stat-number">0</span>
+          </div>
+          <div class="stat-card">
+            <h3>Total Jobs</h3>
+            <span id="total-jobs" class="stat-number">0</span>
+          </div>
+          <div class="stat-card">
+            <h3>Active Jobs</h3>
+            <span id="active-jobs" class="stat-number">0</span>
+          </div>
+          <div class="stat-card">
+            <h3>Failed Jobs</h3>
+            <span id="failed-jobs" class="stat-number">0</span>
+          </div>
+        </div>
+
+        <!-- DISABLED: Top Heaviest Queues Section -->
+        <!--
+        <div class="heaviest-queues-section">
+          <h2>🏆 Top Heaviest Queues by Memory Usage</h2>
+          <div id="heaviest-queues-list" class="heaviest-queues-list">
+            <!-- Top heaviest queues will be dynamically inserted here -->
+          </div>
+        </div>
+        -->
+
+        <div class="queues-container">
+          <h2>Queue Overview</h2>
+          <div id="queues-grid" class="queues-grid">
+            <!-- Queue cards will be dynamically inserted here -->
+          </div>
+        </div>
+
+        <div class="queue-details" id="queue-details" style="display: none">
+          <h2>Queue Details: <span id="selected-queue-name"></span></h2>
+          <div class="job-tabs">
+            <button class="tab-btn active" data-status="waiting">
+              Waiting
+            </button>
+            <button class="tab-btn" data-status="active">Active</button>
+            <button class="tab-btn" data-status="completed">Completed</button>
+            <button class="tab-btn" data-status="failed">Failed</button>
+            <button class="tab-btn" data-status="delayed">Delayed</button>
+          </div>
+          <div id="jobs-container" class="jobs-container">
+            <!-- Job details will be loaded here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Keys Popup Modal -->
+      <div id="queue-keys-modal" class="modal" style="display: none">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Redis Keys for Queue: <span id="modal-queue-name"></span></h2>
+            <span class="close-modal" id="close-modal">&times;</span>
+          </div>
+          <div class="modal-body">
+            <div class="keys-summary">
+              <p>Total Keys: <span id="total-keys-count">0</span></p>
+              <p>
+                Showing: <span id="showing-keys-count">0</span> keys (limited to
+                first 50)
+              </p>
+            </div>
+            <div class="keys-container" id="keys-container">
+              <div class="loading">Loading keys...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>
