@@ -558,7 +558,7 @@ class BullDashboard {
     const cardsContainer = document.createElement("div");
     cardsContainer.className = "queue-cards-container";
     cardsContainer.style.display = "grid";
-    cardsContainer.style.gridTemplateColumns = "repeat(4, 1fr)";
+    cardsContainer.style.gridTemplateColumns = "repeat(3, 1fr)";
     cardsContainer.style.gap = "1rem";
     grid.appendChild(cardsContainer);
 

@@ -525,12 +525,6 @@ header h1 {
   margin-bottom: 20px;
 }
 
-.queues-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 15px;
-}
-
 .queue-cards-container .queue-card-detailed {
   background: white !important;
   border: 1px solid #e2e8f0 !important;
