@@ -7,6 +7,8 @@ class BullDashboard {
     this.memoryChart = null;
     this.currentPage = "redis";
     this.queuesLoaded = false; // Track if queues have been loaded
+    this.sortField = 'name';
+    this.sortDirection = 'asc';
 
     this.init();
   }
@@ -119,27 +121,27 @@ class BullDashboard {
   }
 
   setupPageSwitching() {
-    // Page navigation buttons
-    const redisTab = document.getElementById("redis-tab");
-    const queuesTab = document.getElementById("queues-tab");
+    // Hash-based routing for tabs
+    window.addEventListener("hashchange", () => this.handleHashChange());
+    // Initialize based on current hash (or default to redis)
+    this.handleHashChange();
+  }
 
-    if (redisTab) {
-      redisTab.addEventListener("click", () => {
-        this.switchToPage("redis");
-      });
-    }
-
-    if (queuesTab) {
-      queuesTab.addEventListener("click", () => {
-        this.switchToPage("queues");
-      });
-    }
-
-    // Initialize with Redis page active
-    this.switchToPage("redis");
+  handleHashChange() {
+    const hash = (window.location.hash || "#redis").replace("#", "");
+    const page = (hash === "queues" ? "queues" : "redis");
+    this.switchToPage(page);
   }
 
   switchToPage(page) {
+    // Keep URL hash in sync when switching programmatically
+    const desiredHash = `#${page}`;
+    if (window.location.hash !== desiredHash) {
+      // This will trigger handleHashChange, which will call switchToPage again
+      // so guard against infinite loops by only updating hash when needed
+      window.location.hash = desiredHash;
+    }
+
     this.currentPage = page;
     console.log("Switching to page:", page);
 
@@ -530,14 +532,12 @@ class BullDashboard {
       return;
     }
 
-    // Sort queues by memory usage (heaviest first)
+    // Sort queues by name for consistent ordering
     const sortedStats = stats.sort((a, b) => {
-      const memoryA = parseFloat(a.memoryUsage?.mb) || 0;
-      const memoryB = parseFloat(b.memoryUsage?.mb) || 0;
-      return memoryB - memoryA; // Descending order (heaviest first)
+      return a.name.localeCompare(b.name);
     });
 
-    // Initialize lazy loading
+    // Initialize table with lazy loading
     this.initializeLazyLoading(grid, sortedStats);
   }
 
@@ -548,37 +548,63 @@ class BullDashboard {
     // Store all queues for lazy loading
     this.allQueues = allQueues;
     this.currentLoadedCount = 0;
-    this.cardsPerRow = 4; // 4 cards per row
-    this.rowsToLoad = 5; // Load 5 rows at a time
-    this.batchSize = this.cardsPerRow * this.rowsToLoad; // 20 cards per batch
+    this.rowsPerBatch = 20; // Number of rows to load per batch
     this.isLoading = false;
     this.autoLoadTimer = null;
 
-    // Create container for queue cards
-    const cardsContainer = document.createElement("div");
-    cardsContainer.className = "queue-cards-container";
-    cardsContainer.style.display = "grid";
-    cardsContainer.style.gridTemplateColumns = "repeat(3, 1fr)";
-    cardsContainer.style.gap = "1rem";
-    grid.appendChild(cardsContainer);
+    // Create table container
+    const tableContainer = document.createElement("div");
+    tableContainer.className = "table-responsive";
+    tableContainer.style.overflowX = "auto";
+    tableContainer.style.width = "100%";
+    
+    // Create table element
+    this.tableElement = document.createElement("table");
+    this.tableElement.className = "queues-table";
+    this.tableElement.style.width = "100%";
+    this.tableElement.style.borderCollapse = "collapse";
+    this.tableElement.style.marginTop = "20px";
+    
+    // Create table header
+    this.tableElement.innerHTML = this.createTableHeader();
+    
+    // Create table body
+    this.tableBody = document.createElement("tbody");
+    this.tableBody.id = "queues-table-body";
+    this.tableElement.appendChild(this.tableBody);
+    
+    // Add table to container
+    tableContainer.appendChild(this.tableElement);
+    grid.appendChild(tableContainer);
 
     // Create loading indicator
     const loadingIndicator = document.createElement("div");
     loadingIndicator.className = "auto-loading-indicator";
     loadingIndicator.style.textAlign = "center";
-    loadingIndicator.style.marginTop = "2rem";
+    loadingIndicator.style.marginTop = "1rem";
+    loadingIndicator.style.padding = "1rem";
     loadingIndicator.style.display = "none";
+    loadingIndicator.style.backgroundColor = "#f8fafc";
+    loadingIndicator.style.borderRadius = "4px";
+    loadingIndicator.style.border = "1px solid #e2e8f0";
     loadingIndicator.innerHTML = `
-      <div class="loading-spinner">🔄</div>
-      <p>Auto-loading next batch in <span id="countdown">5</span> seconds...</p>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <div class="loading-spinner" style="animation: spin 1s linear infinite;">🔄</div>
+        <span>Loading more queues... <span id="countdown">5</span>s</span>
+      </div>
     `;
     grid.appendChild(loadingIndicator);
 
+    // Add scroll event listener for infinite scrolling
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        this.loadNextBatch();
+      }
+    }, { threshold: 0.1 });
+    observer.observe(loadingIndicator);
+
     // Load initial batch
     this.loadNextBatch();
-
-    // Start auto-loading timer
-    this.startAutoLoadTimer();
   }
 
   loadNextBatch() {
@@ -587,7 +613,6 @@ class BullDashboard {
     }
 
     this.isLoading = true;
-    const cardsContainer = document.querySelector(".queue-cards-container");
     const loadingIndicator = document.querySelector(".auto-loading-indicator");
 
     // Show loading indicator
@@ -598,50 +623,46 @@ class BullDashboard {
     // Calculate batch to load
     const startIndex = this.currentLoadedCount;
     const endIndex = Math.min(
-      startIndex + this.batchSize,
+      startIndex + this.rowsPerBatch,
       this.allQueues.length
     );
     const batchQueues = this.allQueues.slice(startIndex, endIndex);
 
     // Simulate loading delay for better UX
     setTimeout(() => {
-      // Create and append new cards
+      // Create and append table rows
+      const fragment = document.createDocumentFragment();
+      
       batchQueues.forEach((queue) => {
-        console.log("Creating card for queue:", queue.name);
-        const cardHTML = this.createQueueCard(queue);
-        console.log("Generated HTML:", cardHTML.substring(0, 100) + "...");
-
-        const cardElement = document.createElement("div");
-        cardElement.innerHTML = cardHTML;
-        const card = cardElement.firstElementChild;
-
-        console.log("Card element:", card);
-        console.log("Card classes:", card.className);
-
-        // Add click listener
-        card.addEventListener("click", () => {
-          this.selectQueue(card.dataset.queueName);
+        const rowHTML = this.createQueueCard(queue);
+        const row = document.createElement('tr');
+        row.innerHTML = rowHTML;
+        
+        // Add click listener to the row
+        row.addEventListener('click', () => {
+          this.selectQueue(queue.name);
         });
-
-        cardsContainer.appendChild(card);
-        console.log("Card appended to container");
+        
+        fragment.appendChild(row);
       });
-
+      
+      // Append all rows at once for better performance
+      this.tableBody.appendChild(fragment);
+      
       // Update loaded count
       this.currentLoadedCount = endIndex;
-
-      // Hide loading indicator
-      if (loadingIndicator) {
-        loadingIndicator.style.display = "none";
-      }
-
       this.isLoading = false;
-
+      
+      // Hide loading indicator if we've loaded all queues
+      if (this.currentLoadedCount >= this.allQueues.length && loadingIndicator) {
+        loadingIndicator.style.display = 'none';
+      }
+      
       // Continue auto-loading if there are more queues
       if (this.currentLoadedCount < this.allQueues.length) {
         this.startAutoLoadTimer();
       }
-    }, 300); // Small delay to show loading state
+    }, 100); // Small delay for better UX
   }
 
   startAutoLoadTimer() {
@@ -655,24 +676,21 @@ class BullDashboard {
       return;
     }
 
-    const loadingIndicator = document.querySelector(".auto-loading-indicator");
+    // Start countdown for next batch
+    let countdown = 5; // seconds
     const countdownElement = document.getElementById("countdown");
-
-    if (loadingIndicator) {
-      loadingIndicator.style.display = "block";
-    }
-
-    let countdown = 5;
+    
     if (countdownElement) {
       countdownElement.textContent = countdown;
     }
 
     this.autoLoadTimer = setInterval(() => {
       countdown--;
+      
       if (countdownElement) {
         countdownElement.textContent = countdown;
       }
-
+      
       if (countdown <= 0) {
         clearInterval(this.autoLoadTimer);
         this.loadNextBatch();
@@ -692,234 +710,195 @@ class BullDashboard {
     }
   }
 
-  createQueueCard(queue) {
-    // Calculate memory usage display
-    const memoryMB = queue.memoryUsage?.mb || "0";
-    const memoryBytes = queue.memoryUsage?.bytes || 0;
-
-    // Format memory display
-    const memoryMBFormatted = parseFloat(memoryMB).toFixed(0);
-    const memoryBytesFormatted = parseInt(memoryBytes).toLocaleString();
-
-    // Determine if queue is running (has any jobs)
-    const isRunning =
-      queue.waiting +
-        queue.active +
-        queue.completed +
-        queue.failed +
-        queue.delayed >
-      0;
-    const runningStatus = isRunning ? "🟢 Running" : "⚪ Running";
-
+  createTableHeader() {
     return `
-      <div class="queue-card-detailed" data-queue-name="${
-        queue.name
-      }" style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); min-height: 200px; display: flex; flex-direction: column; gap: 12px; color: #2d3748;">
-        <div class="queue-card-title" style="font-size: 14px; font-weight: 600; color: #2d3748; margin-bottom: 12px; text-align: left;">
-          ${this.escapeHtml(queue.name)}
-        </div>
-
-        <div class="queue-stats-row" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 8px;">
-          <div class="stat-col" style="text-align: center;">
-            <div class="stat-label" style="font-size: 10px; font-weight: 500; color: #718096; text-transform: uppercase; margin-bottom: 2px;">WAITING</div>
-            <div class="stat-value" style="font-size: 11px; color: #4a5568; font-weight: 500;">${
-              queue.waiting || 0
-            }</div>
-          </div>
-          <div class="stat-col" style="text-align: center;">
-            <div class="stat-label" style="font-size: 10px; font-weight: 500; color: #718096; text-transform: uppercase; margin-bottom: 2px;">ACTIVE</div>
-            <div class="stat-value" style="font-size: 11px; color: #4a5568; font-weight: 500;">${
-              queue.active || 0
-            }</div>
-          </div>
-          <div class="stat-col" style="text-align: center;">
-            <div class="stat-label" style="font-size: 10px; font-weight: 500; color: #718096; text-transform: uppercase; margin-bottom: 2px;">COMPLETED</div>
-            <div class="stat-value" style="font-size: 11px; color: #4a5568; font-weight: 500;">${
-              queue.completed || 0
-            }</div>
-          </div>
-          <div class="stat-col" style="text-align: center;">
-            <div class="stat-label" style="font-size: 10px; font-weight: 500; color: #718096; text-transform: uppercase; margin-bottom: 2px;">FAILED</div>
-            <div class="stat-value" style="font-size: 11px; color: #4a5568; font-weight: 500;">${
-              queue.failed || 0
-            }</div>
-          </div>
-          <div class="stat-col" style="text-align: center;">
-            <div class="stat-label" style="font-size: 10px; font-weight: 500; color: #718096; text-transform: uppercase; margin-bottom: 2px;">DELAYED</div>
-            <div class="stat-value" style="font-size: 11px; color: #4a5568; font-weight: 500;">${
-              queue.delayed || 0
-            }</div>
-          </div>
-          <div class="stat-col" style="text-align: center;">
-            <div class="stat-label" style="font-size: 10px; font-weight: 500; color: #718096; text-transform: uppercase; margin-bottom: 2px;">TOTAL</div>
-            <div class="stat-value" style="font-size: 11px; color: #4a5568; font-weight: 500;">${
-              queue.total || 0
-            }</div>
-          </div>
-        </div>
-
-        <div class="queue-stats-row">
-          <div class="stat-col">
-            <div class="stat-number">${queue.waiting || 0}</div>
-          </div>
-          <div class="stat-col">
-            <div class="stat-number">${queue.active || 0}</div>
-          </div>
-          <div class="stat-col">
-            <div class="stat-number">${queue.completed || 0}</div>
-          </div>
-          <div class="stat-col">
-            <div class="stat-number">${queue.failed || 0}</div>
-          </div>
-          <div class="stat-col">
-            <div class="stat-number ${
-              queue.delayed > 0 ? "undefined-text" : ""
-            }">${queue.delayed > 0 ? "undefined" : queue.delayed || 0}</div>
-          </div>
-          <div class="stat-col">
-            <div class="stat-number">${queue.total || 0}</div>
-          </div>
-        </div>
-
-        <div class="memory-section">
-          <div class="memory-badge">
-            <div class="memory-label">MEMORY</div>
-            <div class="memory-value">${memoryMBFormatted} MB (${memoryBytesFormatted} bytes)</div>
-          </div>
-        </div>
-
-        <div class="queue-footer">
-          <div class="running-status">${runningStatus}</div>
-          <div class="updated-status">Updated: Invalid Date</div>
-        </div>
-      </div>
+      <thead>
+        <tr style="background-color: #f7fafc; border-bottom: 2px solid #e2e8f0;">
+          <th style="padding: 12px; text-align: left; font-weight: 600; color: #4a5568; cursor: pointer;" 
+              onclick="dashboard.sortTable('name')">
+            Queue Name ${this.getSortIcon('name')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('waiting')">
+            WAITING ${this.getSortIcon('waiting')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('active')">
+            ACTIVE ${this.getSortIcon('active')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('completed')">
+            COMPLETED ${this.getSortIcon('completed')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('failed')">
+            FAILED ${this.getSortIcon('failed')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('delayed')">
+            DELAYED ${this.getSortIcon('delayed')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('total')">
+            TOTAL ${this.getSortIcon('total')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568; cursor: pointer;"
+              onclick="dashboard.sortTable('memory')">
+            MEMORY (MB) ${this.getSortIcon('memory')}
+          </th>
+          <th style="padding: 12px; text-align: center; font-weight: 600; color: #4a5568;">
+            STATUS
+          </th>
+        </tr>
+      </thead>
     `;
+  }
+
+  createQueueCard(queue) {
+    const hasJobs = queue.waiting + queue.active + queue.completed + queue.failed + queue.delayed > 0;
+    const memoryUsage = this.calculateQueueMemory(queue);
+    
+    // Helper function to format cell content with conditional styling and data attributes for responsive view
+    const formatCell = (value, label, isHighlight = false) => {
+      const highlightStyle = isHighlight ? 'font-weight: 600; color: #2d3748;' : 'color: #4a5568;';
+      return `
+        <td 
+          data-label="${label}" 
+          style="padding: 12px; text-align: center; ${highlightStyle} border-bottom: 1px solid #edf2f7;"
+        >
+          ${value || 0}
+        </td>`;
+    };
+    
+    return `
+      <tr 
+        class="queue-row" 
+        data-queue-name="${queue.name}" 
+        style="transition: background-color 0.2s ease;"
+        onmouseover="this.style.backgroundColor='#f8fafc'" 
+        onmouseout="this.style.backgroundColor='#ffffff'"
+      >
+        <td 
+          data-label="Queue Name"
+          style="padding: 12px; font-weight: 500; color: #2d3748; border-bottom: 1px solid #edf2f7;"
+        >
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span>${this.escapeHtml(queue.name)}</span>
+          </div>
+        </td>
+        ${formatCell(queue.waiting, 'WAITING')}
+        ${formatCell(queue.active, 'ACTIVE')}
+        ${formatCell(queue.completed, 'COMPLETED')}
+        ${formatCell(queue.failed, 'FAILED')}
+        ${formatCell(queue.delayed, 'DELAYED')}
+        ${formatCell(queue.total, 'TOTAL', true)}
+        <td 
+          data-label="MEMORY (MB)" 
+          style="padding: 12px; text-align: center; color: #4a5568; border-bottom: 1px solid #edf2f7;"
+        >
+          ${this.formatMemory(memoryUsage)}
+        </td>
+        <td 
+          data-label="STATUS"
+          style="padding: 12px; text-align: center; border-bottom: 1px solid #edf2f7;"
+        >
+          <span 
+            class="status-indicator" 
+            data-active="${hasJobs}"
+            style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: ${hasJobs ? '#38a169' : '#a0aec0'}; ${hasJobs ? 'animation: pulse 1.5s infinite;' : ''}"
+            title="${hasJobs ? 'Queue is active' : 'Queue is idle'}"
+          ></span>
+        </td>
+      </tr>`;
+  }
+  
+  closeTable() {
+    return `
+        </tbody>
+      </table>
+    `;
+  }
+
+  // Format bytes to MB with 2 decimal places
+  formatMemory(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(2);
+  }
+
+  // Calculate memory usage for a queue
+  calculateQueueMemory(queue) {
+    // This is a simplified calculation - adjust based on your actual memory usage
+    const jobSize = 1024; // Approx 1KB per job
+    return (queue.total || 0) * jobSize;
+  }
+
+  // Get sort icon based on current sort field and direction
+  getSortIcon(field) {
+    if (this.sortField !== field) return '↕️';
+    return this.sortDirection === 'asc' ? '⬆️' : '⬇️';
+  }
+
+  // Sort table data
+  sortTable(field) {
+    if (this.sortField === field) {
+      // Toggle sort direction if same field is clicked
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      // Default to ascending for new field
+      this.sortDirection = 'asc';
+      this.sortField = field;
+    }
+
+    // Sort the queues array
+    this.allQueues.sort((a, b) => {
+      let valueA, valueB;
+
+      if (field === 'memory') {
+        valueA = this.calculateQueueMemory(a);
+        valueB = this.calculateQueueMemory(b);
+      } else if (field === 'name') {
+        valueA = a[field] || '';
+        valueB = b[field] || '';
+      } else {
+        valueA = a[field] || 0;
+        valueB = b[field] || 0;
+      }
+
+      // Handle string comparison for queue names
+      if (typeof valueA === 'string') {
+        return this.sortDirection === 'asc' 
+          ? valueA.localeCompare(valueB)
+          : valueB.localeCompare(valueA);
+      }
+
+      // Handle number comparison for all other fields
+      return this.sortDirection === 'asc' 
+        ? valueA - valueB 
+        : valueB - valueA;
+    });
+
+    // Reset pagination and reload the table
+    this.currentLoadedCount = 0;
+    const grid = document.getElementById("queues-grid");
+    if (grid) {
+      grid.innerHTML = '';
+      this.initializeLazyLoading(grid, this.allQueues);
+    }
   }
 
   async selectQueue(queueName) {
     this.selectedQueue = queueName;
 
-    // Show queue details modal with statistics and Redis keys
-    this.showQueueDetailsModal(queueName);
+    // Directly show Redis Keys modal instead of Queue Statistics
+    this.showQueueKeysModal(queueName);
   }
 
   async showQueueDetailsModal(queueName) {
-    // Create and show a detailed modal with queue statistics
-    const modal = document.createElement("div");
-    modal.className = "queue-details-modal";
-
-    // Show loading state first
-    modal.innerHTML = `
-      <div class="queue-details-modal-content">
-        <div class="queue-details-header">
-          <h2>Queue Details: ${queueName}</h2>
-          <button class="close-modal" onclick="this.parentElement.parentElement.parentElement.remove()">&times;</button>
-        </div>
-        <div class="queue-details-body">
-          <div class="queue-stats-section">
-            <h3>📊 Queue Statistics</h3>
-            <div class="loading-container">
-              <div class="loading-spinner">🔄</div>
-              <p>Loading queue statistics...</p>
-            </div>
-          </div>
-          <div class="queue-actions-section">
-            <h3>🔧 Actions</h3>
-            <button class="action-btn" onclick="document.querySelector('.queue-details-modal').remove(); dashboard.showQueueKeysModal('${queueName}')">
-              🔍 View Redis Keys
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Add modal to DOM first
-    document.body.appendChild(modal);
-
+    // Per requirement: show Redis Keys directly and omit statistics UI
     try {
-      // Fetch real queue statistics
-      console.log(`Fetching statistics for queue: ${queueName}`);
-      const response = await fetch(`/api/queues/${queueName}`);
-      const queueStats = await response.json();
-
-      console.log(`Queue stats for ${queueName}:`, queueStats);
-
-      // Update modal with real data
-      const statsSection = modal.querySelector(".queue-stats-section");
-
-      statsSection.innerHTML = `
-        <h3>📊 Queue Statistics</h3>
-        <div class="queue-stats-grid">
-          <div class="stat-item">
-            <span class="stat-label">Waiting:</span>
-            <span class="stat-value">${queueStats.waiting || 0}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Active:</span>
-            <span class="stat-value">${queueStats.active || 0}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Completed:</span>
-            <span class="stat-value">${queueStats.completed || 0}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Failed:</span>
-            <span class="stat-value">${queueStats.failed || 0}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Total:</span>
-            <span class="stat-value">${queueStats.total || 0}</span>
-          </div>
-        </div>
-        <div class="stats-note">
-          <p>✅ <strong>Real-time data</strong> from Redis and Bull queue</p>
-        </div>
-      `;
-    } catch (error) {
-      console.error(`Error fetching queue statistics for ${queueName}:`, error);
-
-      // Show error state
-      const statsSection = modal.querySelector(".queue-stats-section");
-      statsSection.innerHTML = `
-        <h3>📊 Queue Statistics</h3>
-        <div class="error-container">
-          <p>❌ <strong>Error:</strong> Failed to load queue statistics</p>
-          <p>Please try again or check the console for details.</p>
-        </div>
-      `;
+      this.showQueueKeysModal(queueName);
+    } catch (e) {
+      console.error("Failed to open Redis Keys modal for", queueName, e);
     }
-
-    // Add modal styles
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    `;
-
-    document.body.appendChild(modal);
-
-    // Close modal when clicking outside
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) {
-        modal.remove();
-      }
-    });
-
-    // Close modal with Escape key
-    const handleEscape = (e) => {
-      if (e.key === "Escape") {
-        modal.remove();
-        document.removeEventListener("keydown", handleEscape);
-      }
-    };
-    document.addEventListener("keydown", handleEscape);
   }
 
   async showQueueKeysModal(queueName) {

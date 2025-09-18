@@ -56,6 +56,7 @@ header h1 {
   font-size: 0.9rem;
   transition: all 0.3s ease;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .nav-btn:hover {
@@ -87,6 +88,186 @@ header h1 {
 
 #queues-page:not(.active) .queues-container {
   display: none !important;
+}
+
+/* Blinking animation for active status */
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* Table Styles */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 20px 0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: white;
+  position: relative;
+}
+
+/* Status indicator */
+.status-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #a0aec0;
+}
+
+.status-indicator[data-active="true"] {
+  background-color: #38a169;
+  animation: pulse 1.5s infinite;
+}
+
+/* Sortable table headers */
+th[onclick] {
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+th[onclick]:hover {
+  background-color: #edf2f7;
+}
+
+/* Memory usage cell */
+td[data-label^="MEMORY"] {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.queues-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.queues-table th,
+.queues-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.queues-table th {
+  background-color: #f7fafc;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.queues-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.queues-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.queues-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Status indicators */
+.queue-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8em;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background-color: #f0f0f0;
+}
+
+/* Responsive table */
+/* Mobile styles */
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: inline-block;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+  
+  .queues-table {
+    display: block;
+    width: 100%;
+  }
+  
+  .queues-table thead {
+    display: none;
+  }
+  
+  .queues-table tbody tr {
+    display: block;
+    padding: 16px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+  }
+  
+  .queues-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border: none;
+    position: relative;
+  }
+  
+  .queues-table tbody td:first-child {
+    padding-top: 0;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+  
+  .queues-table tbody td:last-child {
+    padding-bottom: 0;
+    font-weight: 600;
+    color: #2d3748;
+  }
+  
+  .queues-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 500;
+    color: #718096;
+    margin-right: 12px;
+    text-transform: uppercase;
+    font-size: 0.75em;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+  
+  .queues-table tbody td > span:not(.mobile-only) {
+    text-align: right;
+    flex-grow: 1;
+  }
+  
+  /* Queue name cell */
+  .queues-table tbody td:first-child::before {
+    display: none;
+  }
+  
+  .queues-table tbody td:first-child > div {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
 }
 
 /* Loading State Styles */

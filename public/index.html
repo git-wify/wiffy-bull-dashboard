@@ -12,15 +12,15 @@
       <header>
         <h1>🐂 Bull Queue Dashboard</h1>
         <nav class="navigation">
-          <button id="redis-tab" class="nav-btn active">
+          <a id="redis-tab" class="nav-btn active" href="#redis" role="button" aria-controls="redis-page">
             📊 Redis Monitoring
-          </button>
-          <button id="queues-tab" class="nav-btn">🔄 Queue Management</button>
+          </a>
+          <a id="queues-tab" class="nav-btn" href="#queues" role="button" aria-controls="queues-page">🔄 Queue Management</a>
         </nav>
         <div class="header-controls">
           <div class="status-indicator">
             <span id="connection-status" class="status-dot offline"></span>
-            <span id="connection-text">Connecting...</span>
+            <span id="connection-text" style="display: none;">Connecting...</span>
           </div>
           <button id="refresh-btn" class="refresh-btn">🔄 Refresh</button>
         </div>
